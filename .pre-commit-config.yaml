@@ -1,0 +1,13 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: lab-validate
+        name: lab.py validate
+        entry: python3 tooling/lab.py validate
+        language: system
+        pass_filenames: false
+        files: ^products/.*product\.json$

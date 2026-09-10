@@ -1,0 +1,17 @@
+{
+  "status": "example",
+  "scenarios": [
+    {
+      "id": "SCN-share",
+      "summary": "owner-a shares a note with org-a-member and revokes it",
+      "actors": ["owner-a", "org-a-member"],
+      "expected": "org-a-member can read the note while shared and is denied after revocation"
+    },
+    {
+      "id": "SCN-isolation",
+      "summary": "org-b-admin attempts to open an org-a note by direct id",
+      "actors": ["org-b-admin"],
+      "expected": "server denies access; no note content is returned"
+    }
+  ]
+}

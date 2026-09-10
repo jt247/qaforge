@@ -1,0 +1,154 @@
+[
+  {
+    "id": "WEB-001",
+    "title": "Approved public page loads",
+    "mandatory": true,
+    "actor": "anonymous",
+    "source": "lab baseline",
+    "steps": ["Open the configured URL without following unapproved hosts."],
+    "expected": "Successful HTTP response. This establishes reachability only.",
+    "risk": "medium",
+    "execution": "http-smoke"
+  },
+  {
+    "id": "PRODUCT-001",
+    "title": "Primary documented journey",
+    "mandatory": true,
+    "actor": "primary user",
+    "source": "REQ-2",
+    "steps": [
+      "Sign in as owner-a and create a note with a valid title and body.",
+      "Reload and confirm the note persists; edit it and confirm the change persists."
+    ],
+    "expected": "The documented create and edit outcome is achieved and survives reload.",
+    "risk": "high",
+    "execution": "agent"
+  },
+  {
+    "id": "ACCESS-001",
+    "title": "User and organization boundaries",
+    "mandatory": true,
+    "actor": "two isolated test identities",
+    "source": "REQ-3; lab security baseline",
+    "steps": [
+      "As owner-a create a note. As org-b-admin request that note by its id.",
+      "As org-a-member (no share) request the same note by its id."
+    ],
+    "expected": "Both non-owners are denied server-side; no note body is returned.",
+    "risk": "high",
+    "execution": "agent"
+  },
+  {
+    "id": "UX-001",
+    "title": "Responsive and keyboard journey",
+    "mandatory": true,
+    "actor": "primary user",
+    "source": "lab baseline",
+    "steps": [
+      "Check the notes list and editor at narrow and wide viewports.",
+      "Complete note creation using only the keyboard and inspect focus and labels."
+    ],
+    "expected": "Content stays usable; controls have meaningful labels and visible focus.",
+    "risk": "medium",
+    "execution": "agent"
+  },
+  {
+    "id": "AUTH-001",
+    "title": "Authentication and session lifecycle",
+    "mandatory": true,
+    "actor": "confirmed authenticated role",
+    "source": "REQ-1, REQ-5",
+    "steps": [
+      "Verify login succeeds with valid credentials and is rejected with invalid ones.",
+      "Log out, then replay the prior session cookie against a notes endpoint."
+    ],
+    "expected": "Only valid identities gain access; the logged-out session cannot read notes.",
+    "risk": "high",
+    "execution": "agent"
+  },
+  {
+    "id": "DATA-001",
+    "title": "Validation and saved-state integrity",
+    "mandatory": true,
+    "actor": "primary role",
+    "source": "REQ-6",
+    "steps": [
+      "Submit an empty title, a 121-character title, and a duplicate note.",
+      "Reload and verify no partial or contradictory record was stored."
+    ],
+    "expected": "Valid data persists; rejected input leaves no partial record.",
+    "risk": "high",
+    "execution": "agent"
+  },
+  {
+    "id": "ERROR-001",
+    "title": "Error and recovery states",
+    "mandatory": true,
+    "actor": "primary role",
+    "source": "lab QA baseline",
+    "steps": [
+      "Inspect empty, loading, and error states through approved non-destructive methods.",
+      "Submit the same note twice quickly and check for duplication."
+    ],
+    "expected": "Users get actionable feedback; retry does not duplicate important actions.",
+    "risk": "medium",
+    "execution": "agent"
+  },
+  {
+    "id": "SEC-001",
+    "title": "Sensitive information exposure",
+    "mandatory": true,
+    "actor": "anonymous and authenticated test roles",
+    "source": "lab security baseline",
+    "steps": [
+      "Inspect UI and API responses for secrets or data beyond the actor's permissions.",
+      "Review the organization members response for other users' emails or roles."
+    ],
+    "expected": "Secrets and unauthorized personal information are not exposed.",
+    "risk": "high",
+    "execution": "agent"
+  },
+  {
+    "id": "INTEGRATION-001",
+    "title": "Integration outcomes",
+    "mandatory": false,
+    "actor": "confirmed integration user",
+    "source": "pending integration inventory",
+    "steps": [
+      "Inventory integrations and review applicability. Admin Notes has none in this example.",
+      "If a real copy has integrations, verify success, rejection, and resulting state against approved sandboxes."
+    ],
+    "expected": "Integration and application states agree with documented business rules.",
+    "risk": "high",
+    "execution": "agent"
+  },
+  {
+    "id": "EX-003",
+    "title": "Share and revoke inside an organization",
+    "mandatory": true,
+    "actor": "owner-a; org-a-member",
+    "source": "REQ-3",
+    "steps": [
+      "As owner-a share a note with org-a-member and confirm the member can read it.",
+      "Revoke the share and confirm the member is denied on the next request."
+    ],
+    "expected": "Access follows the share state immediately in both directions.",
+    "risk": "high",
+    "execution": "agent"
+  },
+  {
+    "id": "EX-004",
+    "title": "Member invitation and role assignment",
+    "mandatory": true,
+    "actor": "org-a-admin; invited user",
+    "source": "REQ-4",
+    "steps": [
+      "As org-a-admin invite a new user and set role to member.",
+      "Accept the invite and verify the resulting role from the invited user's session.",
+      "Attempt to accept the invite a second time or with a tampered role value."
+    ],
+    "expected": "Role matches what the admin set; replay or tampering does not escalate.",
+    "risk": "high",
+    "execution": "agent"
+  }
+]

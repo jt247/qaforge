@@ -1,0 +1,10 @@
+{
+  "status": "example",
+  "personas": [
+    "owner-a",
+    "owner-b",
+    "org-a-admin",
+    "org-a-member",
+    "org-b-admin"
+  ]
+}

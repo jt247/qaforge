@@ -1,0 +1,11 @@
+local/*
+!local/README.md
+.env
+.env.*
+!.env.example
+**/storage-state*.json
+**/runs/**/evidence/**
+**/runs/**/private/**
+**/__pycache__/
+node_modules/
+.DS_Store

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "name": "Admin Notes",
+  "slug": "_example",
+  "priority": "example",
+  "kind": "web-app",
+  "requirements_status": "example fixture",
+  "security_target": "ASVS 5.0.0 applicable Level 2",
+  "environments": {
+    "staging": {
+      "url": "",
+      "enabled": false,
+      "allowed_hosts": [],
+      "approved_actions": ["read-only"],
+      "build": "unknown",
+      "scope_notes": ""
+    },
+    "production": {
+      "url": "",
+      "enabled": false,
+      "allowed_hosts": [],
+      "approved_actions": ["read-only"],
+      "build": "unknown",
+      "scope_notes": ""
+    }
+  }
+}
