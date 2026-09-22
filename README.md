@@ -1,20 +1,75 @@
-# QA Lab
+# QAForge
 
-A local workspace for running product quality assurance and application security
-assessment with two AI coding agents that check each other's work.
+A workspace for running product quality assurance and broad, browser based
+application testing with two AI coding agents that check each other's work.
 
-QA Lab is a filesystem and a small standard library command line tool. It holds
-the standards, templates, per product test catalogs, run records, and evidence
-for an assessment. It does not launch agents and it does not run in the cloud.
-You open one agent session per product, point it at its folder, and the
-filesystem is the durable record of what was actually done.
+QAForge is a filesystem and a small standard library command line tool. It
+holds the standards, templates, per product test catalogs, run records, and
+evidence for an assessment. It does not launch agents and it does not run in
+the cloud. You open one agent session per product, point it at its folder, and
+the filesystem is the durable record of what was actually done.
 
 Built and maintained by Joshua Theophilus.
+
+## Deploy this, no coding required
+
+You do not need to write or understand code to use QAForge. You need one of
+the following, already paid for:
+
+- **Claude Code** (desktop app or CLI), on any plan that includes it, or
+- **ChatGPT Plus or higher** (20 US dollars a month or above), used with
+  **Codex** inside the ChatGPT desktop app or the Codex CLI environment.
+
+Steps:
+
+1. Open Claude Code (desktop app is easiest) or open Codex from your ChatGPT
+   desktop app.
+2. Tell it to clone this repository: `https://github.com/jt247/qaforge`, or
+   open the repository directly if your tool supports that.
+3. Tell your assistant, in plain language, what you want to test: the app's
+   name, its URL, whether it is staging or production, and that you want to
+   set up and run QAForge against it.
+4. The assistant reads `AGENTS.md` and the standards in this repository and
+   sets everything up for you: creating the product folder, configuring the
+   session, and running the checks. You do not run any command yourself unless
+   you want to.
+
+That is the whole setup. There is no server to host, no account to create
+inside this repository, and no dependency to install beyond Python 3.10 or
+newer, which the assistant will check for you.
+
+## What this covers
+
+QAForge runs broad web application and browser based QA:
+
+- Core user flows and journeys, end to end.
+- UI checks: layout, responsiveness, keyboard access, visible focus, and
+  labels.
+- Form and input checks: validation, boundary and empty values, duplicate
+  submissions, and type checks on fields.
+- Saved state: does data persist correctly after a reload, an edit, or a
+  rejected action.
+- Error, loading, and empty states.
+- Basic access and permission boundaries: can one user see another user's
+  data, does logout actually end a session.
+- Reachability and basic sensitive data exposure in what the browser and the
+  application's own responses reveal.
+
+## What this does not cover
+
+QAForge does not claim penetration testing or detailed, technical
+cybersecurity testing. It does not scan for vulnerabilities, attempt
+exploitation, fuzz inputs at the network or protocol level, or test
+infrastructure, source code, or dependencies. The access and session checks
+above are ordinary QA and product security hygiene, not a security
+assessment. If you need a penetration test or a compliance audit, hire someone
+qualified to do that; this tool does not substitute for it and does not issue
+any certification.
 
 ## The model
 
 Most AI assisted testing uses one agent. One agent plans the tests, runs them,
-and grades itself. QA Lab runs two.
+and grades itself. QAForge runs two.
 
 You use two agents from two different providers, and each one runs on the most
 capable model that provider offers. The reference setup is Codex on OpenAI's
@@ -31,15 +86,15 @@ missing piece of evidence. The product owner makes the final release decision.
 
 ## Shared engineering layer: ECC
 
-QA Lab uses the ECC plugin as the engineering layer both agents work inside.
+QAForge uses the ECC plugin as the engineering layer both agents work inside.
 ECC is an open source agent harness by Affaan Mustafa. It provides planning,
 test driven development, fresh context code review, and security scanning as
 reusable workflows, so the two agents follow the same process instead of
 improvising it each session.
 
-Here is exactly how QA Lab uses it:
+Here is exactly how QAForge uses it:
 
-- Planning before any change to the lab tooling, through ECC's planning workflow.
+- Planning before any change to the tooling, through ECC's planning workflow.
 - `/code-review` for a fresh context review of every change to `tooling/`.
 - `/security-scan`, which runs ECC's AgentShield, against the repository before
   any new product target is enabled.
@@ -52,7 +107,7 @@ install it yourself. Full credit and installation instructions:
 - Website: https://ecc.tools
 - License: MIT
 
-If you do not want to install ECC, the lab still works. You lose the shared
+If you do not want to install ECC, QAForge still works. You lose the shared
 review and scanning workflows and take on running that discipline yourself.
 
 ## Requirements
@@ -127,6 +182,8 @@ file.
 
 ## What this is not
 
+- Not penetration testing or detailed cybersecurity testing. See "What this
+  does not cover" above.
 - Not a vulnerability scanner. There is no automated crawling or exploitation.
 - Not a certification. These assessments do not constitute security or
   regulatory compliance certification.

@@ -1,6 +1,6 @@
 # Contributing
 
-QA Lab is a small standard library tool plus a set of standards and templates.
+QAForge is a small standard library tool plus a set of standards and templates.
 Keep changes small, tested, and honest about their limits.
 
 ## Ground rules

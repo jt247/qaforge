@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local QA lab orchestration. Standard library only; a smoke check never implies full QA.
+"""QAForge local QA orchestration. Standard library only; a smoke check never implies full QA.
 
 product.json contract (validated by validate_config; there is no separate JSON Schema):
   schema_version: int, must be 1
@@ -195,7 +195,7 @@ def smoke(r, agent):
     opener = urllib.request.build_opener(ScopedRedirect(env))
     started = now()
     try:
-        request = urllib.request.Request(env['url'], headers={'User-Agent': 'QA-Lab/1.0 (authorized-read-only-smoke)'})
+        request = urllib.request.Request(env['url'], headers={'User-Agent': 'QAForge/1.0 (authorized-read-only-smoke)'})
         with opener.open(request, timeout=15) as response:
             code = response.status
             response.read(1024)  # bounded read; page content is deliberately not persisted
@@ -271,7 +271,7 @@ def cmd_verify_sources(r):
     print('All recorded sources unchanged since run creation.'); return 0
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description='QA lab orchestration; see module docstring for the product.json contract.')
+    ap = argparse.ArgumentParser(description='QAForge orchestration; see module docstring for the product.json contract.')
     sub = ap.add_subparsers(dest='command', required=True)
     sub.add_parser('list'); sub.add_parser('validate')
     rp = sub.add_parser('runs'); rp.add_argument('product')

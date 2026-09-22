@@ -1,6 +1,6 @@
 # Security and authorization model
 
-QA Lab is used to assess web applications. This file describes how the workspace
+QAForge is used to assess web applications. This file describes how the workspace
 keeps that activity authorized and safe. It is not a vulnerability disclosure
 policy for this repository; for that, open a private advisory on GitHub.
 
