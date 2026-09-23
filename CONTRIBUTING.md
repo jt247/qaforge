@@ -27,7 +27,8 @@ Keep changes small, tested, and honest about their limits.
 There is no separate JSON Schema. `validate_config` in `tooling/lab.py` is the
 single source of truth and its rules are documented in the module docstring at
 the top of that file. A product has `schema_version` 1, a `name`, a `slug` that
-matches `[a-z0-9-]+`, and `environments.staging` and `environments.production`.
+matches `_?[a-z0-9][a-z0-9-]*` (a leading underscore marks a synthetic example
+such as `_example`), and `environments.staging` and `environments.production`.
 An environment that is enabled also carries `authorized_by`, `auth_method`,
 `granted_at`, and `expires_at`, all set by the `configure` command.
 

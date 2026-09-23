@@ -61,7 +61,7 @@ def save(path, data):
     temp.replace(path)
 def fail(message): raise ValueError(message)
 def product(slug):
-    if not re.fullmatch(r'[a-z0-9-]+', slug): fail('Invalid product slug')
+    if not re.fullmatch(r'_?[a-z0-9][a-z0-9-]*', slug): fail('Invalid product slug')
     path = ROOT / 'products' / slug
     if not (path / 'product.json').is_file(): fail('Unknown product')
     return path

@@ -98,6 +98,14 @@ class LabTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.call('new-run', 'demo', '--env', 'staging', '--agent', 'claude', '--review-of', 'no-such-run', *GOAL)
 
+    def test_example_style_slug_with_leading_underscore_is_accepted(self):
+        ex = lab.ROOT / 'products/_demo'
+        (ex / 'runs').mkdir(parents=True)
+        lab.save(ex / 'product.json', lab.read(self.p / 'product.json') | {'slug': '_demo'})
+        self.assertEqual(lab.product('_demo'), ex)
+        for bad in ('-demo', 'De mo', '__x', 'demo/../x'):
+            with self.assertRaises(ValueError): lab.product(bad)
+
     def test_session_prompt_names_product_and_waits_for_confirmation(self):
         with contextlib.redirect_stdout(io.StringIO()) as out:
             lab.main(['session', 'demo', '--agent', 'claude', '--print-only'])
