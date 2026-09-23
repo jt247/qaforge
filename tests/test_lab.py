@@ -79,6 +79,39 @@ class LabTests(unittest.TestCase):
         self.assertIn('goal: confirm baseline reachability', log)
         self.assertIn('Goal: confirm baseline reachability', (r / 'plan.md').read_text())
 
+    def test_new_run_persists_plan_brief_and_findings_index(self):
+        r = self.start()
+        plan = (r / 'plan.md').read_text(); brief = (r / 'brief.md').read_text()
+        for text in (plan, brief):
+            self.assertIn('Lead agent: codex', text); self.assertIn('Confirmed by: owner@example', text)
+            self.assertIn(f'URL: {self.url}', text)
+        self.assertTrue((self.p / 'findings/INDEX.md').exists())
+        m = lab.read(r / 'manifest.json')
+        self.assertEqual(m['goal'], 'confirm baseline reachability'); self.assertIsNone(m['review_of'])
+
+    def test_review_of_links_to_existing_run(self):
+        first = self.start()
+        self.call('new-run', 'demo', '--env', 'staging', '--agent', 'claude', '--review-of', first.name, *GOAL)
+        second = next(d for d in (self.p / 'runs').iterdir() if d.name.endswith('_claude'))
+        self.assertEqual(lab.read(second / 'manifest.json')['review_of'], first.name)
+        self.assertIn(f'Review of: {first.name}', (second / 'plan.md').read_text())
+        with self.assertRaises(ValueError):
+            self.call('new-run', 'demo', '--env', 'staging', '--agent', 'claude', '--review-of', 'no-such-run', *GOAL)
+
+    def test_session_prompt_names_product_and_waits_for_confirmation(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            lab.main(['session', 'demo', '--agent', 'claude', '--print-only'])
+        text = out.getvalue()
+        self.assertIn('Demo', text); self.assertIn('AGENTS.md', text); self.assertIn('wait for my explicit confirmation', text)
+
+    def test_init_creates_identity_and_reports(self):
+        (lab.ROOT / 'templates/identity.example.json').write_text('{"gmail_address": "", "phone_number": ""}\n')
+        (lab.ROOT / 'tests').mkdir(exist_ok=True)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            lab.main(['init'])
+        self.assertTrue((lab.ROOT / 'local/identity.json').exists())
+        self.assertIn('product configurations valid', out.getvalue())
+
     def test_smoke_and_report_do_not_imply_readiness(self):
         r = self.start()
         self.assertEqual(self.call('smoke', 'demo', '--run', r.name, '--agent', 'codex'), 0)

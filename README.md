@@ -11,32 +11,70 @@ the filesystem is the durable record of what was actually done.
 
 Built and maintained by Joshua Theophilus.
 
-## Deploy this, no coding required
+## Two ways in
 
-You do not need to write or understand code to use QAForge. You need one of
-the following, already paid for:
+QAForge never calls an AI API itself. It runs inside the Claude Code and Codex
+sessions you already pay for, and the same one-shot bootstrap sets everything up
+whichever door you use. You need one or both of:
 
-- **Claude Code** (desktop app or CLI), on any plan that includes it, or
-- **ChatGPT Plus or higher** (20 US dollars a month or above), used with
-  **Codex** inside the ChatGPT desktop app or the Codex CLI environment.
+- **Claude Code** (desktop app or CLI) on a plan that includes it.
+- **ChatGPT Plus or higher** with **Codex** (the ChatGPT desktop app or the
+  Codex CLI). Check OpenAI's current plan eligibility before relying on this.
 
-Steps:
+### Door 1: no coding required
 
-1. Open Claude Code (desktop app is easiest) or open Codex from your ChatGPT
-   desktop app.
-2. Tell it to clone this repository: `https://github.com/jt247/qaforge`, or
-   open the repository directly if your tool supports that.
-3. Tell your assistant, in plain language, what you want to test: the app's
-   name, its URL, whether it is staging or production, and that you want to
-   set up and run QAForge against it.
-4. The assistant reads `AGENTS.md` and the standards in this repository and
-   sets everything up for you: creating the product folder, configuring the
-   session, and running the checks. You do not run any command yourself unless
+1. Open Claude Code (desktop app is easiest) or Codex from the ChatGPT desktop
+   app.
+2. Tell it to clone `https://github.com/jt247/qaforge` into a folder and open
+   that folder as the project.
+3. Say, in plain language, what you want to test: the app's name, its URL,
+   staging or production, and that you want QAForge set up and run against it.
+4. The assistant reads `AGENTS.md`, runs the bootstrap itself, creates the
+   product folder, states the goal and the testing plan, and waits for you to
+   confirm in chat before it runs anything. You never type a command unless
    you want to.
 
-That is the whole setup. There is no server to host, no account to create
-inside this repository, and no dependency to install beyond Python 3.10 or
-newer, which the assistant will check for you.
+### Door 2: terminal
+
+```sh
+git clone https://github.com/jt247/qaforge
+cd qaforge
+python3 tooling/lab.py init
+python3 tooling/lab.py session <product-slug> --agent claude
+python3 tooling/lab.py session <product-slug> --agent codex
+```
+
+`init` checks Python and Git, reports whether ECC and a browser MCP are
+present, creates `local/identity.json` from the template, validates every
+product folder, and runs the unit tests. It prints READY or tells you exactly
+what is missing.
+
+`session` starts your own already signed in `claude` or `codex` CLI in this
+repository with the session brief preloaded, so the agent opens by stating the
+goal and plan and waiting for your confirmation. Add `--print-only` to get the
+prompt as text and paste it into a desktop app instead.
+
+Authentication is whatever each CLI already uses: your subscription login by
+default, or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` if you prefer keys. See
+`.env.example`. QAForge reads neither.
+
+### ECC and the browser tool
+
+Browser based checks need a browser MCP. The ECC plugin ships one
+(`chrome-devtools`) as its default connector, so installing ECC covers both the
+engineering workflows and the browser tool in one step:
+
+```sh
+npx ecc-universal setup
+```
+
+When the installer asks for a hook profile, pick `none` or `minimal` to start;
+the `standard` profile adds confirmation prompts on every file edit that you may
+not want while testing. If you skip ECC, configure the Playwright MCP instead;
+`init` will tell you whether either is detected.
+
+There is no server to host and no dependency to install beyond Python 3.10 or
+newer.
 
 ## What this covers
 

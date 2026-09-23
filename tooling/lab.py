@@ -247,6 +247,91 @@ def report(r):
     (r / 'report.md').write_text('\n'.join(lines) + '\n')
     print(str(r / 'report.md'))
 
+def template_text(name, fallback):
+    path = ROOT / 'templates' / name
+    return path.read_text() if path.is_file() else fallback
+
+def write_run_docs(r, p, c, a, env):
+    """Copy the run plan and session brief templates into the run, prefilled from the confirmed chat brief."""
+    head = (f'Goal: {a.goal}\nConfirmed by: {a.confirmed_by}\nLead agent: {a.agent}\n'
+            f'Product: {c["name"]}\nEnvironment: {a.env}\nURL: {env["url"]}\nBuild: {env["build"]}\n'
+            f'Retest of: {a.retest_of or "none"}\nReview of: {a.review_of or "none"}\n')
+    gaps = onboarding_gaps(p)
+    gap_line = ('\nOnboarding incomplete: ' + ', '.join(gaps) + '. Only baseline lab cases are justified.\n') if gaps else ''
+    plan = template_text('run-plan.md', '# Run plan\n')
+    brief = template_text('session-brief.md', '# Testing session brief\n')
+    (r / 'plan.md').write_text(plan.rstrip('\n') + '\n\n## Confirmed in chat\n' + head + gap_line)
+    (r / 'brief.md').write_text(brief.rstrip('\n') + '\n\n## Confirmed in chat\n' + head)
+
+FINDINGS_INDEX_HEADER = ('# Findings index\n| ID | Severity | Status | First run | Retest run | Title |\n|---|---|---|---|---|---|\n')
+
+def ensure_findings_index(p):
+    index = p / 'findings' / 'INDEX.md'
+    if not index.exists():
+        index.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text(template_text('findings-index.md', FINDINGS_INDEX_HEADER))
+
+def cmd_init():
+    import shutil, subprocess
+    ok = True
+    def line(good, text):
+        nonlocal ok
+        ok = ok and good
+        print(('OK   ' if good else 'MISSING ') + text)
+    line(sys.version_info >= (3, 10), f'Python {sys.version.split()[0]} (need 3.10+)')
+    line(shutil.which('git') is not None, 'git on PATH')
+    settings = Path.home() / '.claude' / 'settings.json'
+    ecc = False
+    if settings.is_file():
+        try: ecc = bool(read(settings).get('enabledPlugins', {}).get('ecc@ecc'))
+        except (ValueError, OSError): ecc = False
+    print(('OK   ' if ecc else 'INFO ') + ('ECC plugin enabled for Claude Code' if ecc else 'ECC plugin not detected for Claude Code; install with: npx ecc-universal setup'))
+    blobs = ''
+    for f in (Path.home() / '.claude.json', settings, ROOT / '.mcp.json'):
+        if f.is_file():
+            try: blobs += f.read_text()
+            except OSError: pass
+    browser = ('chrome-devtools' in blobs) or ('playwright' in blobs.lower())
+    print(('OK   ' if browser else 'INFO ') + ('browser MCP configured (chrome-devtools or playwright)' if browser else 'no browser MCP detected; agents cannot run browser cases until one is configured'))
+    line(shutil.which('claude') is not None, 'claude CLI on PATH (Claude Code)')
+    line(shutil.which('codex') is not None, 'codex CLI on PATH (Codex)')
+    identity = ROOT / 'local' / 'identity.json'
+    if not identity.exists():
+        identity.parent.mkdir(parents=True, exist_ok=True)
+        identity.write_text(template_text('identity.example.json', '{}\n'))
+        print('CREATED local/identity.json from template; fill gmail_address and phone_number before account-creation flows')
+    else:
+        print('OK   local/identity.json present')
+    try:
+        main(['validate']); print('OK   product configurations valid')
+    except ValueError as e:
+        ok = False; print(f'FAIL validate: {e}')
+    tests = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', str(ROOT / 'tests')], capture_output=True, text=True)
+    line(tests.returncode == 0, 'unit tests ' + ('pass' if tests.returncode == 0 else 'FAIL:\n' + tests.stderr[-2000:]))
+    print('\nREADY' if ok else '\nNOT READY: fix the MISSING/FAIL items above, then re-run init.')
+    return 0 if ok else 2
+
+def session_prompt(p, c, agent):
+    return (f'Read AGENTS.md and {"CLAUDE.md" if agent == "claude" else "CODEX.md"} first. '
+            f'Start a QAForge testing session for the product "{c["name"]}" (slug {p.name}). '
+            'Read its coordination/state.md, coordination/session-log.md, and latest run. '
+            'Then state the goal and the full session brief (templates/session-brief.md fields) in chat '
+            'and wait for my explicit confirmation before running configure, preflight, new-run, or any browser action.')
+
+def cmd_session(p, agent, print_only):
+    import os, shutil
+    c = read(p / 'product.json')
+    prompt = session_prompt(p, c, agent)
+    if print_only:
+        print(prompt); return 0
+    cli = 'claude' if agent == 'claude' else 'codex'
+    if shutil.which(cli) is None:
+        fail(f'{cli} CLI not found on PATH. Install and sign in first: '
+             + ('https://docs.anthropic.com/claude-code' if cli == 'claude' else 'https://github.com/openai/codex') + '. '
+             'Or pass --print-only and paste the prompt into the desktop app.')
+    os.chdir(ROOT)
+    os.execvp(cli, [cli, prompt])
+
 def append_session_log(p, agent, confirmed_by, env, rid, goal):
     log = p / 'coordination/session-log.md'
     if not log.exists():
@@ -283,6 +368,10 @@ def main(argv=None):
     sub = ap.add_subparsers(dest='command', required=True)
     sub.add_parser('list'); sub.add_parser('validate')
     rp = sub.add_parser('runs'); rp.add_argument('product')
+    sub.add_parser('init', help='first-run bootstrap: check tools, create local/identity.json, validate, run tests')
+    ss = sub.add_parser('session', help='start your Claude Code or Codex CLI in this repo with the session brief preloaded')
+    ss.add_argument('product'); ss.add_argument('--agent', choices=AGENTS, required=True)
+    ss.add_argument('--print-only', action='store_true', help='print the starting prompt instead of launching the CLI')
     cfg = sub.add_parser('configure')
     cfg.add_argument('product'); cfg.add_argument('--env', choices=['staging', 'production'], required=True)
     cfg.add_argument('--url', required=True); cfg.add_argument('--build', default='unknown')
@@ -298,7 +387,8 @@ def main(argv=None):
     for command in ('preflight', 'new-run'):
         sp = sub.add_parser(command); sp.add_argument('product'); sp.add_argument('--env', choices=['staging', 'production'], required=True)
         if command == 'new-run':
-            sp.add_argument('--agent', choices=AGENTS, required=True); sp.add_argument('--retest-of')
+            sp.add_argument('--agent', choices=AGENTS, required=True); sp.add_argument('--retest-of', help='run id this run retests after a fix')
+            sp.add_argument('--review-of', help='run id this run independently reviews on the same build')
             sp.add_argument('--goal', required=True, help='what is being tested and why; stated and confirmed in chat before this run')
             sp.add_argument('--confirmed-by', required=True, help='who confirmed the testing plan in chat before this run started')
     for command in ('claim', 'release', 'smoke', 'result', 'report', 'close', 'aliases', 'verify-sources'):
@@ -320,6 +410,10 @@ def main(argv=None):
         return 0
     if a.command == 'runs':
         cmd_runs(product(a.product)); return 0
+    if a.command == 'init':
+        return cmd_init()
+    if a.command == 'session':
+        return cmd_session(product(a.product), a.agent, a.print_only)
     p = product(a.product); c = read(p / 'product.json')
     if a.command == 'configure':
         host = urlparse(a.url).hostname
@@ -359,6 +453,7 @@ def main(argv=None):
             if gaps: print('Onboarding incomplete (' + ', '.join(gaps) + '). Only baseline lab cases are justified until these are confirmed.')
             return 0
         if a.retest_of: run_path(p, a.retest_of)
+        if a.review_of: run_path(p, a.review_of)
         prefix = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         index = 1
         while True:
@@ -367,13 +462,12 @@ def main(argv=None):
             try: r.mkdir(); break
             except FileExistsError: index += 1
         for folder in ('results/codex', 'results/claude', 'evidence', 'private'): (r / folder).mkdir(parents=True)
-        save(r / 'manifest.json', {'schema_version': 1, 'product_name': c['name'], 'product': a.product, 'agent': a.agent, 'environment': a.env, 'scope': env, 'created_at': now(), 'status': 'open', 'fixture_namespace': f'{a.product}-{rid}', 'retest_of': a.retest_of, 'standard_version': '1.0'})
+        save(r / 'manifest.json', {'schema_version': 1, 'product_name': c['name'], 'product': a.product, 'agent': a.agent, 'environment': a.env, 'scope': env, 'created_at': now(), 'status': 'open', 'fixture_namespace': f'{a.product}-{rid}', 'retest_of': a.retest_of, 'review_of': a.review_of, 'goal': a.goal, 'confirmed_by': a.confirmed_by, 'standard_version': '1.0'})
         save(r / 'cases.json', read(p / 'cases/catalog.json'))
         sources = [f for folder in (ROOT / 'standards', p / 'guides', p / 'docs') for f in folder.rglob('*') if f.is_file()]
         save(r / 'source-hashes.json', {str(f.relative_to(ROOT)): hashlib.sha256(f.read_bytes()).hexdigest() for f in sources})
-        gaps = onboarding_gaps(p)
-        gap_line = ('\nOnboarding incomplete: ' + ', '.join(gaps) + '. Only baseline lab cases are justified.\n') if gaps else ''
-        (r / 'plan.md').write_text(f'# Run plan\nGoal: {a.goal}\nConfirmed by: {a.confirmed_by}\nConfirm requirements, roles, fixtures, scope, and build. Assign independent review before release assessment.\n' + gap_line)
+        write_run_docs(r, p, c, a, env)
+        ensure_findings_index(p)
         (r / 'peer-review.md').write_text((ROOT / 'templates/peer-review.md').read_text())
         (r / 'cleanup.md').write_text('# Cleanup\nNo fixtures created by the runner. Document all subsequent mutations and cleanup here.\n')
         append_session_log(p, a.agent, a.confirmed_by, a.env, rid, a.goal)

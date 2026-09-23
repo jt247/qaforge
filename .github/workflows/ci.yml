@@ -20,6 +20,16 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate product configs
         run: python tooling/lab.py validate
+      - name: No enabled product targets may be committed
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          bad = [p for p in pathlib.Path('products').glob('*/product.json')
+                 if any(e.get('enabled') for e in json.load(p.open())['environments'].values())]
+          if bad:
+              print('Enabled targets committed:', *bad); sys.exit(1)
+          print('No enabled product targets committed.')
+          PY
 
   secret-scan:
     runs-on: ubuntu-latest
