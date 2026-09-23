@@ -140,9 +140,12 @@ Do not copy run history or credentials between products.
 
 ## Run a session
 
-Provide the URL when you start each session, and say whether it is staging or
-production. URLs start unset on purpose. Configuration records who authorized the
-assessment and how, and it expires after fourteen days.
+Every session starts with the agent stating the goal and the session brief in
+chat and waiting for your explicit confirmation before it runs anything. See
+`AGENTS.md` and `templates/session-brief.md`. Provide the URL when you confirm
+each session, and say whether it is staging or production. URLs start unset on
+purpose. Configuration records who authorized the assessment and how, and it
+expires after fourteen days.
 
 ```sh
 python3 tooling/lab.py configure <slug> --env staging \
@@ -152,7 +155,9 @@ python3 tooling/lab.py configure <slug> --env staging \
   --build YOUR-BUILD
 
 python3 tooling/lab.py preflight <slug> --env staging
-python3 tooling/lab.py new-run <slug> --env staging --agent codex
+python3 tooling/lab.py new-run <slug> --env staging --agent codex \
+  --goal "<what is being tested and why, from the confirmed brief>" \
+  --confirmed-by "<who confirmed the plan in chat>"
 python3 tooling/lab.py smoke <slug> --run RUN_ID --agent codex
 python3 tooling/lab.py result <slug> --run RUN_ID --agent codex \
   --case PRODUCT-001 --status blocked --note "Requirements pending"
@@ -165,6 +170,11 @@ sandbox payments are separate permissions that must be added to the saved scope.
 Plain HTTP targets and private or loopback addresses are rejected unless you pass
 `--allow-insecure` or `--allow-private` for a local staging host. Cloud metadata
 endpoints are always rejected.
+
+`new-run` refuses without `--goal` and `--confirmed-by`, and it appends a dated
+line to the product's `coordination/session-log.md` automatically. That file,
+together with the run's `manifest.json`, dated results, and `report.md`, is the
+testing log: what was tested, why, who confirmed it, and when.
 
 Other commands: `runs <slug>` lists a product's runs, `verify-sources` checks
 whether the standards or guides changed since a run was created, `disable` takes

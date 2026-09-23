@@ -247,6 +247,14 @@ def report(r):
     (r / 'report.md').write_text('\n'.join(lines) + '\n')
     print(str(r / 'report.md'))
 
+def append_session_log(p, agent, confirmed_by, env, rid, goal):
+    log = p / 'coordination/session-log.md'
+    if not log.exists():
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text('# Session log\nDated, append-only record of every confirmed testing session for this product.\n\n')
+    with log.open('a') as f:
+        f.write(f'- {now()} | {agent} | run {rid} | env {env} | confirmed by {confirmed_by} | goal: {goal}\n')
+
 def cmd_runs(p):
     rows = []
     runs_dir = p / 'runs'
@@ -291,6 +299,8 @@ def main(argv=None):
         sp = sub.add_parser(command); sp.add_argument('product'); sp.add_argument('--env', choices=['staging', 'production'], required=True)
         if command == 'new-run':
             sp.add_argument('--agent', choices=AGENTS, required=True); sp.add_argument('--retest-of')
+            sp.add_argument('--goal', required=True, help='what is being tested and why; stated and confirmed in chat before this run')
+            sp.add_argument('--confirmed-by', required=True, help='who confirmed the testing plan in chat before this run started')
     for command in ('claim', 'release', 'smoke', 'result', 'report', 'close', 'aliases', 'verify-sources'):
         sp = sub.add_parser(command); sp.add_argument('product'); sp.add_argument('--run', required=True)
         if command not in ('report', 'verify-sources'): sp.add_argument('--agent', choices=AGENTS, required=True)
@@ -363,9 +373,10 @@ def main(argv=None):
         save(r / 'source-hashes.json', {str(f.relative_to(ROOT)): hashlib.sha256(f.read_bytes()).hexdigest() for f in sources})
         gaps = onboarding_gaps(p)
         gap_line = ('\nOnboarding incomplete: ' + ', '.join(gaps) + '. Only baseline lab cases are justified.\n') if gaps else ''
-        (r / 'plan.md').write_text('# Run plan\nConfirm requirements, roles, fixtures, scope, and build. Assign independent review before release assessment.\n' + gap_line)
+        (r / 'plan.md').write_text(f'# Run plan\nGoal: {a.goal}\nConfirmed by: {a.confirmed_by}\nConfirm requirements, roles, fixtures, scope, and build. Assign independent review before release assessment.\n' + gap_line)
         (r / 'peer-review.md').write_text((ROOT / 'templates/peer-review.md').read_text())
         (r / 'cleanup.md').write_text('# Cleanup\nNo fixtures created by the runner. Document all subsequent mutations and cleanup here.\n')
+        append_session_log(p, a.agent, a.confirmed_by, a.env, rid, a.goal)
         claim(r, a.agent); report(r); print(f'Created and claimed: {rid}'); return 0
     r = run_path(p, a.run)
     if a.command == 'claim': claim(r, a.agent)

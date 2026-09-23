@@ -15,6 +15,7 @@ spec.loader.exec_module(lab)
 
 AUTH = ['--authorized-by', 'owner@example', '--auth-method', 'written scope confirmation']
 LOCAL = ['--allow-insecure', '--allow-private']  # the test server is http on loopback
+GOAL = ['--goal', 'confirm baseline reachability', '--confirmed-by', 'owner@example']
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -58,12 +59,25 @@ class LabTests(unittest.TestCase):
 
     def start(self, path=''):
         self.configure(path)
-        self.call('new-run', 'demo', '--env', 'staging', '--agent', 'codex')
+        self.call('new-run', 'demo', '--env', 'staging', '--agent', 'codex', *GOAL)
         return sorted((self.p / 'runs').iterdir())[-1]
 
     def test_unset_url_blocks_run(self):
-        with self.assertRaises(ValueError): self.call('new-run', 'demo', '--env', 'staging', '--agent', 'codex')
+        with self.assertRaises(ValueError): self.call('new-run', 'demo', '--env', 'staging', '--agent', 'codex', *GOAL)
         self.assertEqual(list((self.p / 'runs').iterdir()), [])
+
+    def test_new_run_requires_goal_and_confirmation(self):
+        self.configure()
+        with self.assertRaises(SystemExit):
+            self.call('new-run', 'demo', '--env', 'staging', '--agent', 'codex')
+
+    def test_new_run_logs_confirmed_session_with_date(self):
+        r = self.start()
+        log = (self.p / 'coordination/session-log.md').read_text()
+        self.assertIn(r.name, log)
+        self.assertIn('confirmed by owner@example', log)
+        self.assertIn('goal: confirm baseline reachability', log)
+        self.assertIn('Goal: confirm baseline reachability', (r / 'plan.md').read_text())
 
     def test_smoke_and_report_do_not_imply_readiness(self):
         r = self.start()
@@ -134,14 +148,14 @@ class LabTests(unittest.TestCase):
         c = lab.read(self.p / 'product.json')
         c['environments']['staging']['expires_at'] = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         lab.save(self.p / 'product.json', c)
-        with self.assertRaises(ValueError): self.call('new-run', 'demo', '--env', 'staging', '--agent', 'codex')
+        with self.assertRaises(ValueError): self.call('new-run', 'demo', '--env', 'staging', '--agent', 'codex', *GOAL)
 
     def test_disable_clears_scope(self):
         self.configure()
         self.assertEqual(self.call('disable', 'demo', '--env', 'staging'), 0)
         env = lab.read(self.p / 'product.json')['environments']['staging']
         self.assertFalse(env['enabled']); self.assertEqual(env['url'], '')
-        with self.assertRaises(ValueError): self.call('new-run', 'demo', '--env', 'staging', '--agent', 'codex')
+        with self.assertRaises(ValueError): self.call('new-run', 'demo', '--env', 'staging', '--agent', 'codex', *GOAL)
 
     def test_redaction_guard_blocks_secret_and_identity(self):
         r = self.start()
