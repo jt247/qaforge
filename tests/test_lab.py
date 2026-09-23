@@ -98,6 +98,28 @@ class LabTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.call('new-run', 'demo', '--env', 'staging', '--agent', 'claude', '--review-of', 'no-such-run', *GOAL)
 
+    def test_card_numbers_blocked_but_timestamps_allowed(self):
+        self.assertTrue(lab.secret_hit('paid with 4111 1111 1111 1111'))   # Luhn-valid test card
+        self.assertFalse(lab.secret_hit('recorded at epoch 1727000000000'))  # 13 digits, not Luhn-valid
+        self.assertFalse(lab.secret_hit('order 12345678901234'))
+
+    def test_empty_evidence_rejected_and_only_owner_results_dir(self):
+        r = self.start()
+        empty = r / 'evidence' / 'WEB-001-01-empty.png'; empty.write_bytes(b'')
+        with self.assertRaises(ValueError): lab.record(r, 'codex', 'WEB-001', 'passed', 'ok', ['evidence/WEB-001-01-empty.png'])
+        self.assertTrue((r / 'results/codex').is_dir()); self.assertFalse((r / 'results/claude').exists())
+
+    def test_doctor_and_status_rollup(self):
+        r = self.start()
+        self.call('smoke', 'demo', '--run', r.name, '--agent', 'codex')
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            lab.main(['doctor', 'demo']); lab.main(['status', 'demo']); lab.main(['runs', 'demo'])
+        text = out.getvalue()
+        self.assertIn('active until', text); self.assertIn('open claims: ' + r.name, text)
+        self.assertIn('| WEB-001 | passed |', text); self.assertIn('| PRODUCT-001 | not-run |', text)
+        self.assertIn('goal: confirm baseline reachability', text)
+        self.assertTrue((self.p / 'coordination/latest-status.md').exists())
+
     def test_example_style_slug_with_leading_underscore_is_accepted(self):
         ex = lab.ROOT / 'products/_demo'
         (ex / 'runs').mkdir(parents=True)

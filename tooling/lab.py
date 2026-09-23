@@ -49,8 +49,25 @@ SECRET_PATTERNS = [re.compile(p, re.I) for p in (
     r'\bgh[pousr]_[A-Za-z0-9]{20,}',
     r'\bsk-[A-Za-z0-9]{20,}',
     r'-----BEGIN [A-Z ]*PRIVATE KEY-----',
-    r'(?:\d[ -]?){13,19}',  # card-like digit run
 )]
+CARD_RUN = re.compile(r'(?<!\d)(?:\d[ -]?){13,19}(?!\d)')
+
+def luhn_ok(digits):
+    total, parity = 0, len(digits) % 2
+    for i, ch in enumerate(digits):
+        d = int(ch)
+        if i % 2 == parity:
+            d *= 2
+            if d > 9: d -= 9
+        total += d
+    return total % 10 == 0
+
+def card_like(text):
+    """A 13-19 digit run only counts as card-like if it passes Luhn; timestamps and ids rarely do."""
+    for m in CARD_RUN.finditer(text or ''):
+        digits = re.sub(r'[ -]', '', m.group(0))
+        if 13 <= len(digits) <= 19 and luhn_ok(digits): return True
+    return False
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def read(path): return json.loads(path.read_text())
@@ -130,6 +147,7 @@ def scope_active(env):
 def secret_hit(text):
     for pat in SECRET_PATTERNS:
         if pat.search(text or ''): return True
+    if card_like(text): return True
     identity = ROOT / 'local/identity.json'
     if identity.exists():
         try: ident = read(identity)
@@ -173,6 +191,7 @@ def record(r, agent, case, status, note, evidence):
     for ref in evidence:
         target = (r / ref).resolve()
         if not target.is_relative_to(r.resolve()) or not target.is_file(): fail('Evidence must resolve to a file inside this run')
+        if target.stat().st_size == 0: fail(f'Evidence file is empty: {ref}')
     folder = r / 'results' / agent
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     save(folder / f'{case}_{stamp}.json', {'case': case, 'status': status, 'note': note, 'evidence': evidence, 'agent': agent, 'recorded_at': now()})
@@ -287,7 +306,7 @@ def cmd_init():
         except (ValueError, OSError): ecc = False
     print(('OK   ' if ecc else 'INFO ') + ('ECC plugin enabled for Claude Code' if ecc else 'ECC plugin not detected for Claude Code; install with: npx ecc-universal setup'))
     blobs = ''
-    for f in (Path.home() / '.claude.json', settings, ROOT / '.mcp.json'):
+    for f in (Path.home() / '.claude.json', settings, ROOT / '.mcp.json', Path.home() / '.codex' / 'config.toml'):
         if f.is_file():
             try: blobs += f.read_text()
             except OSError: pass
@@ -349,8 +368,61 @@ def cmd_runs(p):
         m = read(mf)
         owner_file = d / '.claim' / 'owner.json'
         owner = read(owner_file)['agent'] if owner_file.exists() else '-'
-        rows.append(f'{d.name}\t{m["agent"]}\t{m["environment"]}\t{m["status"]}\t{m["created_at"][:10]}\tclaim:{owner}')
+        rows.append(f'{d.name}\t{m["agent"]}\t{m["environment"]}\t{m["status"]}\t{m["created_at"][:10]}\tclaim:{owner}\tgoal: {m.get("goal", "")}')
     print('\n'.join(rows) if rows else 'No runs yet.')
+
+def latest_results(p):
+    """Latest result per case across every run of the product, any agent."""
+    latest = {}
+    runs_dir = p / 'runs'
+    for d in sorted(runs_dir.iterdir()) if runs_dir.is_dir() else []:
+        if not (d / 'manifest.json').is_file(): continue
+        for f in (d / 'results').glob('*/*.json'):
+            item = read(f) | {'run': d.name}
+            if item['case'] not in latest or item['recorded_at'] > latest[item['case']]['recorded_at']:
+                latest[item['case']] = item
+    return latest
+
+def cmd_status(p, c):
+    latest = latest_results(p)
+    lines = [f'# {c["name"]} status', '', 'Latest recorded result per case across all runs and both agents. Not a release decision.', '',
+             '| Case | Status | Run | Agent | Recorded | Note |', '|---|---|---|---|---|---|']
+    counts = {s: 0 for s in STATUSES}
+    for case in read(p / 'cases/catalog.json'):
+        item = latest.get(case['id'])
+        status = item['status'] if item else 'not-run'
+        counts[status] = counts.get(status, 0) + 1
+        note = '' if not item else ('[redacted]' if secret_hit(item['note']) else item['note'].replace('|', '\\|').replace('\n', ' '))
+        lines.append(f'| {case["id"]} | {status} | {item["run"] if item else "-"} | {item["agent"] if item else "-"} | {item["recorded_at"][:19] if item else "-"} | {note} |')
+    lines += ['', 'Counts: ' + ', '.join(f'{s}={counts.get(s, 0)}' for s in STATUSES), '', f'Generated {now()}']
+    out = p / 'coordination' / 'latest-status.md'
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text('\n'.join(lines) + '\n')
+    print('\n'.join(lines)); print(f'\nWritten to {out}')
+
+def cmd_doctor(p, c):
+    print(f'# {c["name"]} ({p.name})')
+    for name in ('staging', 'production'):
+        env = c['environments'].get(name, {})
+        if not env.get('enabled'):
+            print(f'{name}: not configured'); continue
+        try: scope_active(env); state = f'active until {env.get("expires_at", "?")}'
+        except ValueError: state = f'EXPIRED at {env.get("expires_at", "?")}'
+        print(f'{name}: {env["url"]} | build {env["build"]} | actions {",".join(env["approved_actions"])} | {state}')
+    gaps = onboarding_gaps(p)
+    print('onboarding: ' + ('complete' if not gaps else 'incomplete (' + ', '.join(gaps) + ')'))
+    runs_dir = p / 'runs'
+    runs = [d for d in sorted(runs_dir.iterdir()) if (d / 'manifest.json').is_file()] if runs_dir.is_dir() else []
+    open_claims = [d.name for d in runs if (d / '.claim' / 'owner.json').exists()]
+    print(f'runs: {len(runs)} total | open claims: {", ".join(open_claims) if open_claims else "none"}')
+    for agent in AGENTS:
+        mine = [d for d in runs if read(d / 'manifest.json')['agent'] == agent]
+        print(f'last {agent} run: {mine[-1].name if mine else "none"}')
+    index = p / 'findings' / 'INDEX.md'
+    rows = [l for l in index.read_text().splitlines() if l.startswith('|') and not l.startswith('|---') and not l.startswith('| ID')] if index.is_file() else []
+    print(f'findings indexed: {len(rows)}')
+    identity = ROOT / 'local' / 'identity.json'
+    print('identity: ' + ('present' if identity.exists() else 'missing (run init)'))
 
 def cmd_verify_sources(r):
     saved = read(r / 'source-hashes.json')
@@ -368,6 +440,9 @@ def main(argv=None):
     sub = ap.add_subparsers(dest='command', required=True)
     sub.add_parser('list'); sub.add_parser('validate')
     rp = sub.add_parser('runs'); rp.add_argument('product')
+    for name, help_text in (('doctor', 'readiness: env scope, expiry, onboarding gaps, claims, last runs, findings'),
+                            ('status', 'rollup: latest result per case across all runs and agents')):
+        sp = sub.add_parser(name, help=help_text); sp.add_argument('product')
     sub.add_parser('init', help='first-run bootstrap: check tools, create local/identity.json, validate, run tests')
     ss = sub.add_parser('session', help='start your Claude Code or Codex CLI in this repo with the session brief preloaded')
     ss.add_argument('product'); ss.add_argument('--agent', choices=AGENTS, required=True)
@@ -414,6 +489,9 @@ def main(argv=None):
         return cmd_init()
     if a.command == 'session':
         return cmd_session(product(a.product), a.agent, a.print_only)
+    if a.command in ('doctor', 'status'):
+        p = product(a.product); c = read(p / 'product.json')
+        (cmd_doctor if a.command == 'doctor' else cmd_status)(p, c); return 0
     p = product(a.product); c = read(p / 'product.json')
     if a.command == 'configure':
         host = urlparse(a.url).hostname
@@ -461,7 +539,7 @@ def main(argv=None):
             r = p / 'runs' / rid
             try: r.mkdir(); break
             except FileExistsError: index += 1
-        for folder in ('results/codex', 'results/claude', 'evidence', 'private'): (r / folder).mkdir(parents=True)
+        for folder in (f'results/{a.agent}', 'evidence', 'private'): (r / folder).mkdir(parents=True)
         save(r / 'manifest.json', {'schema_version': 1, 'product_name': c['name'], 'product': a.product, 'agent': a.agent, 'environment': a.env, 'scope': env, 'created_at': now(), 'status': 'open', 'fixture_namespace': f'{a.product}-{rid}', 'retest_of': a.retest_of, 'review_of': a.review_of, 'goal': a.goal, 'confirmed_by': a.confirmed_by, 'standard_version': '1.0'})
         save(r / 'cases.json', read(p / 'cases/catalog.json'))
         sources = [f for folder in (ROOT / 'standards', p / 'guides', p / 'docs') for f in folder.rglob('*') if f.is_file()]

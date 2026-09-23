@@ -73,6 +73,14 @@ the `standard` profile adds confirmation prompts on every file edit that you may
 not want while testing. If you skip ECC, configure the Playwright MCP instead;
 `init` will tell you whether either is detected.
 
+For Codex, register the same browser MCP with the Codex CLI so the second agent
+can drive a browser too (`codex mcp add ...`, stored in `~/.codex/config.toml`;
+`init` checks that file as well). If your Codex setup cannot run a browser MCP,
+Codex still works as the independent reviewer of evidence, but say so in the
+session brief so nobody assumes both agents ran browser cases.
+
+Windows: use `python` in place of `python3`; everything else is the same.
+
 There is no server to host and no dependency to install beyond Python 3.10 or
 newer.
 
@@ -214,10 +222,14 @@ line to the product's `coordination/session-log.md` automatically. That file,
 together with the run's `manifest.json`, dated results, and `report.md`, is the
 testing log: what was tested, why, who confirmed it, and when.
 
-Other commands: `runs <slug>` lists a product's runs, `verify-sources` checks
-whether the standards or guides changed since a run was created, `disable` takes
-an environment back to read only and unconfigured, and `aliases` proposes
-dedicated inbox addresses for confirmed personas without creating any accounts.
+Other commands: `doctor <slug>` prints a product's readiness in one screen
+(scope and expiry, onboarding gaps, open claims, last run per agent, findings
+count); `status <slug>` writes `coordination/latest-status.md`, the latest result
+per case across every run and both agents; `runs <slug>` lists a product's runs
+with their goals; `verify-sources` checks whether the standards or guides changed
+since a run was created; `disable` takes an environment back to read only and
+unconfigured; `aliases` proposes dedicated inbox addresses for confirmed personas
+without creating any accounts.
 
 ## Accounts and private data
 
