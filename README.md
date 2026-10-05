@@ -11,58 +11,66 @@ the filesystem is the durable record of what was actually done.
 
 Built and maintained by Joshua Theophilus.
 
-## Two ways in
+## Three ways to run it
 
 QAForge never calls an AI API itself. It runs inside the Claude Code and Codex
-sessions you already pay for, and the same one-shot bootstrap sets everything up
-whichever door you use. You need one or both of:
+sessions you already have, and the agent drives a real browser for you. You need
+one or both of:
 
-- **Claude Code** (desktop app or CLI) on a plan that includes it.
-- **ChatGPT Plus or higher** with **Codex** (the ChatGPT desktop app or the
-  Codex CLI). Check OpenAI's current plan eligibility before relying on this.
+- **Claude Code** (desktop app or CLI) on a plan that includes it, or an
+  Anthropic API key.
+- **Codex** (ChatGPT desktop app or Codex CLI). It is included with ChatGPT Plus
+  and higher plans, or use an OpenAI API key.
 
-### Door 1: no coding required
+### 1. Desktop app, no coding required
 
-1. Open Claude Code (desktop app is easiest) or Codex from the ChatGPT desktop
-   app.
+1. Open Claude Code (desktop app) or Codex in the ChatGPT desktop app.
 2. Tell it to clone `https://github.com/jt247/qaforge` into a folder and open
    that folder as the project.
 3. Say, in plain language, what you want to test: the app's name, its URL,
    staging or production, and that you want QAForge set up and run against it.
 4. The assistant reads `AGENTS.md`, runs the bootstrap itself, creates the
    product folder, states the goal and the testing plan, and waits for you to
-   confirm in chat before it runs anything. You never type a command unless
-   you want to.
+   confirm in chat. Then it opens the app's built-in browser and runs the
+   checks. You never type a command unless you want to.
 
-### Door 2: terminal
+### 2. Terminal, signed in with your subscription
 
 ```sh
 git clone https://github.com/jt247/qaforge
 cd qaforge
-python3 tooling/lab.py init
+python3 tooling/lab.py init --setup-browser
 python3 tooling/lab.py session <product-slug> --agent claude
 python3 tooling/lab.py session <product-slug> --agent codex
 ```
 
-`init` checks Python and Git, reports whether ECC and a browser MCP are
-present, creates `local/identity.json` from the template, validates every
+`init` checks Python and Git, reports per agent whether a CLI and a browser tool
+are present, creates `local/identity.json` from the template, validates every
 product folder, and runs the unit tests. It prints READY or tells you exactly
-what is missing.
+what is missing. With `--setup-browser` it registers the Playwright browser MCP
+with each installed CLI that has no browser tool yet (this needs Node.js).
 
-`session` starts your own already signed in `claude` or `codex` CLI in this
-repository with the session brief preloaded, so the agent opens by stating the
-goal and plan and waiting for your confirmation. Add `--print-only` to get the
-prompt as text and paste it into a desktop app instead.
+`session` starts your own signed in `claude` or `codex` CLI in this repository
+with the session brief preloaded. The agent states the goal and plan, waits for
+your confirmation, then opens a browser window on your machine through the
+browser MCP and runs the checks while you watch. Approve the browser tool the
+first time your CLI asks.
 
-Authentication is whatever each CLI already uses: your subscription login by
-default, or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` if you prefer keys. See
-`.env.example`. QAForge reads neither.
+### 3. Terminal, with API keys
 
-### ECC and the browser tool
+Same commands as above. Export `ANTHROPIC_API_KEY` for Claude Code and
+`OPENAI_API_KEY` for Codex instead of signing in; see `.env.example`. The CLIs
+read those variables. QAForge reads neither.
 
-Browser based checks need a browser MCP. The ECC plugin ships one
-(`chrome-devtools`) as its default connector, so installing ECC covers both the
-engineering workflows and the browser tool in one step:
+### From any door
+
+`python3 tooling/lab.py session <product-slug> --agent claude --print-only`
+prints the starting prompt as text, so you can paste it into any desktop app.
+
+### ECC
+
+The ECC plugin is the shared engineering layer and also ships a browser MCP
+(`chrome-devtools`) for Claude Code:
 
 ```sh
 npx ecc-universal setup
@@ -70,16 +78,12 @@ npx ecc-universal setup
 
 When the installer asks for a hook profile, pick `none` or `minimal` to start;
 the `standard` profile adds confirmation prompts on every file edit that you may
-not want while testing. If you skip ECC, configure the Playwright MCP instead;
-`init` will tell you whether either is detected.
+not want while testing.
 
-For Codex, register the same browser MCP with the Codex CLI so the second agent
-can drive a browser too (`codex mcp add ...`, stored in `~/.codex/config.toml`;
-`init` checks that file as well). If your Codex setup cannot run a browser MCP,
-Codex still works as the independent reviewer of evidence, but say so in the
-session brief so nobody assumes both agents ran browser cases.
+### Windows
 
-Windows: use `python` in place of `python3`; everything else is the same.
+Use `python` in place of `python3`. Everything else is the same; the runner and
+its tests are exercised on Windows, macOS, and Linux in CI.
 
 There is no server to host and no dependency to install beyond Python 3.10 or
 newer.

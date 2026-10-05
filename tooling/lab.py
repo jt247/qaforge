@@ -70,11 +70,11 @@ def card_like(text):
     return False
 
 def now(): return datetime.now(timezone.utc).isoformat()
-def read(path): return json.loads(path.read_text())
+def read(path): return json.loads(path.read_text(encoding='utf-8'))
 def save(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + '.tmp')
-    temp.write_text(json.dumps(data, indent=2) + '\n')
+    temp.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
     temp.replace(path)
 def fail(message): raise ValueError(message)
 def product(slug):
@@ -238,7 +238,7 @@ ONBOARDING_MARKERS = {
 
 def onboarding_gaps(p):
     return [rel for rel, marker in ONBOARDING_MARKERS.items()
-            if (p / rel).is_file() and marker in (p / rel).read_text()]
+            if (p / rel).is_file() and marker in (p / rel).read_text(encoding='utf-8')]
 
 def report(r):
     m = read(r / 'manifest.json')
@@ -263,12 +263,12 @@ def report(r):
         lines.append(f'| {c["id"]} | {item["status"]} | {note} |')
     lines += ['', 'Counts: ' + ', '.join(f'{s}={counts.get(s, 0)}' for s in STATUSES), '',
               'See peer-review.md, product findings/, and cleanup.md before a release decision. A passing HTTP check is not a passing product assessment.']
-    (r / 'report.md').write_text('\n'.join(lines) + '\n')
+    (r / 'report.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
     print(str(r / 'report.md'))
 
 def template_text(name, fallback):
     path = ROOT / 'templates' / name
-    return path.read_text() if path.is_file() else fallback
+    return path.read_text(encoding='utf-8') if path.is_file() else fallback
 
 def write_run_docs(r, p, c, a, env):
     """Copy the run plan and session brief templates into the run, prefilled from the confirmed chat brief."""
@@ -279,8 +279,8 @@ def write_run_docs(r, p, c, a, env):
     gap_line = ('\nOnboarding incomplete: ' + ', '.join(gaps) + '. Only baseline lab cases are justified.\n') if gaps else ''
     plan = template_text('run-plan.md', '# Run plan\n')
     brief = template_text('session-brief.md', '# Testing session brief\n')
-    (r / 'plan.md').write_text(plan.rstrip('\n') + '\n\n## Confirmed in chat\n' + head + gap_line)
-    (r / 'brief.md').write_text(brief.rstrip('\n') + '\n\n## Confirmed in chat\n' + head)
+    (r / 'plan.md').write_text(plan.rstrip('\n') + '\n\n## Confirmed in chat\n' + head + gap_line, encoding='utf-8')
+    (r / 'brief.md').write_text(brief.rstrip('\n') + '\n\n## Confirmed in chat\n' + head, encoding='utf-8')
 
 FINDINGS_INDEX_HEADER = ('# Findings index\n| ID | Severity | Status | First run | Retest run | Title |\n|---|---|---|---|---|---|\n')
 
@@ -288,9 +288,9 @@ def ensure_findings_index(p):
     index = p / 'findings' / 'INDEX.md'
     if not index.exists():
         index.parent.mkdir(parents=True, exist_ok=True)
-        index.write_text(template_text('findings-index.md', FINDINGS_INDEX_HEADER))
+        index.write_text(template_text('findings-index.md', FINDINGS_INDEX_HEADER), encoding='utf-8')
 
-def cmd_init():
+def cmd_init(setup_browser=False):
     import shutil, subprocess
     ok = True
     def line(good, text):
@@ -305,19 +305,33 @@ def cmd_init():
         try: ecc = bool(read(settings).get('enabledPlugins', {}).get('ecc@ecc'))
         except (ValueError, OSError): ecc = False
     print(('OK   ' if ecc else 'INFO ') + ('ECC plugin enabled for Claude Code' if ecc else 'ECC plugin not detected for Claude Code; install with: npx ecc-universal setup'))
-    blobs = ''
-    for f in (Path.home() / '.claude.json', settings, ROOT / '.mcp.json', Path.home() / '.codex' / 'config.toml'):
-        if f.is_file():
-            try: blobs += f.read_text()
-            except OSError: pass
-    browser = ('chrome-devtools' in blobs) or ('playwright' in blobs.lower())
-    print(('OK   ' if browser else 'INFO ') + ('browser MCP configured (chrome-devtools or playwright)' if browser else 'no browser MCP detected; agents cannot run browser cases until one is configured'))
-    line(shutil.which('claude') is not None, 'claude CLI on PATH (Claude Code)')
-    line(shutil.which('codex') is not None, 'codex CLI on PATH (Codex)')
+    def has_browser(files):
+        text = ''
+        for f in files:
+            if f.is_file():
+                try: text += f.read_text(encoding='utf-8', errors='replace')
+                except OSError: pass
+        return 'chrome-devtools' in text or 'playwright' in text.lower()
+    browser_files = {'claude': (Path.home() / '.claude.json', settings, ROOT / '.mcp.json'),
+                     'codex': (Path.home() / '.codex' / 'config.toml',)}
+    # The CLIs are optional: desktop-app users have neither on PATH and drive the app's own browser.
+    for cli in AGENTS:
+        exe = shutil.which(cli)
+        print(('OK   ' if exe else 'INFO ') + (f'{cli} CLI on PATH' if exe else f'{cli} CLI not on PATH; fine if you use the desktop app, needed for `session --agent {cli}`'))
+        found = has_browser(browser_files[cli]) or (cli == 'claude' and ecc)
+        if not found and exe and setup_browser:
+            cmd = [exe, 'mcp', 'add'] + (['--scope', 'user'] if cli == 'claude' else []) + ['playwright', '--', 'npx', '-y', '@playwright/mcp@latest']
+            done = subprocess.run(cmd, capture_output=True, text=True)
+            found = done.returncode == 0
+            print(('ADDED ' if found else 'FAIL ') + f'Playwright browser MCP for the {cli} CLI' + ('' if found else ': ' + (done.stderr or done.stdout)[-300:]))
+        elif found:
+            print(f'OK   browser MCP configured for {cli}')
+        else:
+            print(f'INFO no browser MCP detected for the {cli} CLI; run `init --setup-browser` (needs Node.js), or use a desktop app with a built-in browser')
     identity = ROOT / 'local' / 'identity.json'
     if not identity.exists():
         identity.parent.mkdir(parents=True, exist_ok=True)
-        identity.write_text(template_text('identity.example.json', '{}\n'))
+        identity.write_text(template_text('identity.example.json', '{}\n'), encoding='utf-8')
         print('CREATED local/identity.json from template; fill gmail_address and phone_number before account-creation flows')
     else:
         print('OK   local/identity.json present')
@@ -338,7 +352,7 @@ def session_prompt(p, c, agent):
             'and wait for my explicit confirmation before running configure, preflight, new-run, or any browser action.')
 
 def cmd_session(p, agent, print_only):
-    import os, shutil
+    import shutil
     c = read(p / 'product.json')
     prompt = session_prompt(p, c, agent)
     if print_only:
@@ -348,15 +362,16 @@ def cmd_session(p, agent, print_only):
         fail(f'{cli} CLI not found on PATH. Install and sign in first: '
              + ('https://docs.anthropic.com/claude-code' if cli == 'claude' else 'https://github.com/openai/codex') + '. '
              'Or pass --print-only and paste the prompt into the desktop app.')
-    os.chdir(ROOT)
-    os.execvp(cli, [cli, prompt])
+    import subprocess
+    # subprocess, not exec: Windows CLIs are .cmd shims that exec cannot replace the process with
+    return subprocess.run([shutil.which(cli), prompt], cwd=ROOT).returncode
 
 def append_session_log(p, agent, confirmed_by, env, rid, goal):
     log = p / 'coordination/session-log.md'
     if not log.exists():
         log.parent.mkdir(parents=True, exist_ok=True)
-        log.write_text('# Session log\nDated, append-only record of every confirmed testing session for this product.\n\n')
-    with log.open('a') as f:
+        log.write_text('# Session log\nDated, append-only record of every confirmed testing session for this product.\n\n', encoding='utf-8')
+    with log.open('a', encoding='utf-8') as f:
         f.write(f'- {now()} | {agent} | run {rid} | env {env} | confirmed by {confirmed_by} | goal: {goal}\n')
 
 def cmd_runs(p):
@@ -397,7 +412,7 @@ def cmd_status(p, c):
     lines += ['', 'Counts: ' + ', '.join(f'{s}={counts.get(s, 0)}' for s in STATUSES), '', f'Generated {now()}']
     out = p / 'coordination' / 'latest-status.md'
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text('\n'.join(lines) + '\n')
+    out.write_text('\n'.join(lines) + '\n', encoding='utf-8')
     print('\n'.join(lines)); print(f'\nWritten to {out}')
 
 def cmd_doctor(p, c):
@@ -419,7 +434,7 @@ def cmd_doctor(p, c):
         mine = [d for d in runs if read(d / 'manifest.json')['agent'] == agent]
         print(f'last {agent} run: {mine[-1].name if mine else "none"}')
     index = p / 'findings' / 'INDEX.md'
-    rows = [l for l in index.read_text().splitlines() if l.startswith('|') and not l.startswith('|---') and not l.startswith('| ID')] if index.is_file() else []
+    rows = [l for l in index.read_text(encoding='utf-8').splitlines() if l.startswith('|') and not l.startswith('|---') and not l.startswith('| ID')] if index.is_file() else []
     print(f'findings indexed: {len(rows)}')
     identity = ROOT / 'local' / 'identity.json'
     print('identity: ' + ('present' if identity.exists() else 'missing (run init)'))
@@ -443,7 +458,8 @@ def main(argv=None):
     for name, help_text in (('doctor', 'readiness: env scope, expiry, onboarding gaps, claims, last runs, findings'),
                             ('status', 'rollup: latest result per case across all runs and agents')):
         sp = sub.add_parser(name, help=help_text); sp.add_argument('product')
-    sub.add_parser('init', help='first-run bootstrap: check tools, create local/identity.json, validate, run tests')
+    ini = sub.add_parser('init', help='first-run bootstrap: check tools, create local/identity.json, validate, run tests')
+    ini.add_argument('--setup-browser', action='store_true', help='register the Playwright browser MCP with each installed CLI that lacks one')
     ss = sub.add_parser('session', help='start your Claude Code or Codex CLI in this repo with the session brief preloaded')
     ss.add_argument('product'); ss.add_argument('--agent', choices=AGENTS, required=True)
     ss.add_argument('--print-only', action='store_true', help='print the starting prompt instead of launching the CLI')
@@ -473,6 +489,8 @@ def main(argv=None):
             sp.add_argument('--case', required=True); sp.add_argument('--status', choices=STATUSES, required=True)
             sp.add_argument('--note', required=True); sp.add_argument('--evidence', action='append', default=[])
     a = ap.parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):  # Windows consoles default to a legacy code page
+        if hasattr(stream, 'reconfigure'): stream.reconfigure(encoding='utf-8', errors='replace')
     if a.command in ('list', 'validate'):
         errors = []
         for p in sorted((ROOT / 'products').iterdir()):
@@ -486,7 +504,7 @@ def main(argv=None):
     if a.command == 'runs':
         cmd_runs(product(a.product)); return 0
     if a.command == 'init':
-        return cmd_init()
+        return cmd_init(a.setup_browser)
     if a.command == 'session':
         return cmd_session(product(a.product), a.agent, a.print_only)
     if a.command in ('doctor', 'status'):
@@ -543,11 +561,11 @@ def main(argv=None):
         save(r / 'manifest.json', {'schema_version': 1, 'product_name': c['name'], 'product': a.product, 'agent': a.agent, 'environment': a.env, 'scope': env, 'created_at': now(), 'status': 'open', 'fixture_namespace': f'{a.product}-{rid}', 'retest_of': a.retest_of, 'review_of': a.review_of, 'goal': a.goal, 'confirmed_by': a.confirmed_by, 'standard_version': '1.0'})
         save(r / 'cases.json', read(p / 'cases/catalog.json'))
         sources = [f for folder in (ROOT / 'standards', p / 'guides', p / 'docs') for f in folder.rglob('*') if f.is_file()]
-        save(r / 'source-hashes.json', {str(f.relative_to(ROOT)): hashlib.sha256(f.read_bytes()).hexdigest() for f in sources})
+        save(r / 'source-hashes.json', {f.relative_to(ROOT).as_posix(): hashlib.sha256(f.read_bytes()).hexdigest() for f in sources})
         write_run_docs(r, p, c, a, env)
         ensure_findings_index(p)
-        (r / 'peer-review.md').write_text((ROOT / 'templates/peer-review.md').read_text())
-        (r / 'cleanup.md').write_text('# Cleanup\nNo fixtures created by the runner. Document all subsequent mutations and cleanup here.\n')
+        (r / 'peer-review.md').write_text((ROOT / 'templates/peer-review.md').read_text(encoding='utf-8'), encoding='utf-8')
+        (r / 'cleanup.md').write_text('# Cleanup\nNo fixtures created by the runner. Document all subsequent mutations and cleanup here.\n', encoding='utf-8')
         append_session_log(p, a.agent, a.confirmed_by, a.env, rid, a.goal)
         claim(r, a.agent); report(r); print(f'Created and claimed: {rid}'); return 0
     r = run_path(p, a.run)
